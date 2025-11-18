@@ -7,19 +7,15 @@ import numpy as np
 from dataset import SubsequenceDataset, split_and_scale
 from tqdm import tqdm
 import os
+from pandas import DataFrame
+from sklearn.metrics import r2_score
+import pickle
 
-from architecture import TimeSeriesLSTM
+from architecture import TimeSeriesLSTM, Small_LSTM
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-def train():
-    # ============================================================================
-    # STEP 1: LOAD AND PREPARE DATA
-    # ============================================================================
-
-    # Load your data (replace with your actual data path)
-    data = pd.read_parquet(f'{CURRENT_DIR}/data/train.parquet')
-
+def make_dataloaders(data: DataFrame):
     # Split and scale the data
     train_data, test_data, scaler = split_and_scale(data)
 
@@ -27,11 +23,7 @@ def train():
     train_data_df = pd.DataFrame(train_data)
     test_data_df = pd.DataFrame(test_data)
 
-    # ============================================================================
-    # STEP 2: CREATE DATASETS AND DATALOADERS
-    # ============================================================================
-
-    batch_size = 32
+    batch_size = 256
     window_size = 100
 
     # Create dataset instances
@@ -41,16 +33,10 @@ def train():
     # Create dataloaders
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+    
+    return train_loader, test_loader, scaler
 
-    # ============================================================================
-    # STEP 3: DEFINE MODEL ARCHITECTURE
-    # ============================================================================
-
-    # architecture.py
-
-    # ============================================================================
-    # STEP 4: TRAINING SETUP
-    # ============================================================================
+def train(input_size, train_loader, test_loader):
 
     # Hyperparameters
     if torch.cuda.is_available():
@@ -61,12 +47,11 @@ def train():
         device = torch.device('cpu')
 
     print(f"Using device: {device}")
-
-    input_size = train_data.shape[1]  # Number of features
+    
     hidden_size = 64
     num_layers = 2
     learning_rate = 0.001
-    num_epochs = 50
+    num_epochs = 8
 
     # Initialize model
     model = TimeSeriesLSTM(
@@ -82,35 +67,6 @@ def train():
 
     # Optional: Learning rate scheduler
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5)
-
-    # ============================================================================
-    # STEP 5: TRAINING LOOP
-    # ============================================================================
-
-    # import time
-
-    # # Profile data loading
-    # start = time.time()
-    # for x, y in tqdm(train_loader):
-    #     pass
-    # data_load_time = time.time() - start
-    # print(f"Data loading time: {data_load_time:.2f}s")
-
-    # # Profile GPU computation
-    # torch.mps.synchronize()
-    # start = time.time()
-    # for epoch in range(1):
-    #     for x, y in tqdm(train_loader):
-    #         x = x.to(device)
-    #         y = y.to(device)
-    #         output = model(x)
-    #         loss = criterion(output, y)
-    #         loss.backward()
-    #         optimizer.step()
-    # torch.mps.synchronize()
-    # gpu_time = time.time() - start
-    # print(f"GPU computation time: {gpu_time:.2f}s")
-
 
     train_losses = []
     test_losses = []
@@ -159,14 +115,9 @@ def train():
         scheduler.step(avg_test_loss)
         
         # Print progress
-        if (epoch + 1) % 10 == 0:
-            print(f"Epoch {epoch+1}/{num_epochs} | "
-                f"Train Loss: {avg_train_loss:.6f} | "
-                f"Test Loss: {avg_test_loss:.6f}")
-
-    # ============================================================================
-    # STEP 6: SAVE AND EVALUATE MODEL
-    # ============================================================================
+        print(f"Epoch {epoch+1}/{num_epochs} | "
+            f"Train Loss: {avg_train_loss:.6f} | "
+            f"Test Loss: {avg_test_loss:.6f}")
 
     # Save model checkpoint
     torch.save(model.state_dict(), 'model_checkpoint.pth')
@@ -178,6 +129,8 @@ def train():
     print("="*70)
     print(f"Final Training Loss: {train_losses[-1]:.6f}")
     print(f"Final Test Loss: {test_losses[-1]:.6f}")
+    
+    return model
 
 # ============================================================================
 # STEP 7: MAKE PREDICTIONS (EXAMPLE)
@@ -190,7 +143,7 @@ def make_predictions(model, test_loader, device, scaler):
     actuals = []
     
     with torch.no_grad():
-        for x, y in test_loader:
+        for x, y in tqdm(test_loader):
             x = x.to(device)
             output = model(x)
             
@@ -201,13 +154,35 @@ def make_predictions(model, test_loader, device, scaler):
     actuals = np.array(actuals)
     
     # Inverse transform if needed
-    # predictions = scaler.inverse_transform(predictions)
-    # actuals = scaler.inverse_transform(actuals)
+    predictions = scaler.inverse_transform(predictions)
+    actuals = scaler.inverse_transform(actuals)
     
     # Calculate RMSE
     rmse = np.sqrt(np.mean((predictions - actuals) ** 2))
     print(f"Test RMSE: {rmse:.6f}")
+    print(r2_score(actuals, predictions))
     
     return predictions, actuals
 
 # predictions, actuals = make_predictions(model, test_loader, device, scaler)
+
+if __name__ == "__main__":
+    data = pd.read_parquet(f'{CURRENT_DIR}/data/train.parquet')
+    train_loader, test_loader, scaler = make_dataloaders(data)
+    
+    with open('scaler.pkl', 'wb') as f:
+        pickle.dump(scaler, f)
+    
+    # model = train(32, train_loader, test_loader)
+
+    # Initialize model architecture (with correct parameters)
+    model = TimeSeriesLSTM(input_size=32, hidden_size=64, num_layers=2, output_size=32)
+
+    # Load checkpoint
+    state_dict = torch.load('model_checkpoint.pth', map_location=torch.device('cpu'))
+    model.load_state_dict(state_dict)
+
+    # Switch to eval mode
+    model.eval()
+    
+    make_predictions(model, test_loader, torch.device('cpu'), scaler)
