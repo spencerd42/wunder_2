@@ -1,6 +1,5 @@
 import torch
 import pandas as pd
-from torch.utils.data import DataLoader
 from tqdm import tqdm
 import numpy as np
 from sklearn.metrics import r2_score, mean_squared_error

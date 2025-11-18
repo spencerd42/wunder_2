@@ -16,6 +16,8 @@ from architecture import TimeSeriesLSTM
 from dataset import make_dataloaders
 from config import TrainingConfig
 
+TIMESTAMP = datetime.now().strftime('%Y%m%d_%H%M%S')
+
 # ============================================================================
 # LOGGING SETUP
 # ============================================================================
@@ -28,8 +30,7 @@ def setup_logging(checkpoint_dir: str) -> logging.Logger:
     logger.setLevel(logging.DEBUG)
     
     # File handler
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    fh = logging.FileHandler(f'{checkpoint_dir}/train_{timestamp}.log')
+    fh = logging.FileHandler(f'{checkpoint_dir}/train_{TIMESTAMP}.log')
     fh.setLevel(logging.DEBUG)
     
     # Console handler
@@ -89,7 +90,7 @@ class EarlyStopping:
                     print(f"✓ Model improved. Checkpoint saved to {self.model_save_path}")
         else:
             self.counter += 1
-            if self.verbose and self.counter % 2 == 0:
+            if self.verbose:
                 print(f"  No improvement for {self.counter}/{self.patience} epochs")
             
             if self.counter >= self.patience:
@@ -211,7 +212,7 @@ def train(input_size: int, train_loader: DataLoader, val_loader: DataLoader,
     early_stopping = EarlyStopping(
         patience=config.early_stopping_patience,
         min_delta=config.early_stopping_min_delta,
-        model_save_path=best_model_path,
+        model_save_path=f'{config.checkpoint_dir}/model_{TIMESTAMP}.pth',
         verbose=True
     )
     

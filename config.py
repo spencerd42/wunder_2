@@ -2,12 +2,12 @@ class TrainingConfig:
     """Centralized configuration for training"""
     def __init__(self):
         self.input_size = 32
-        self.hidden_size = 128
-        self.fc_size = 64
-        self.num_layers = 3
+        self.hidden_size = 64
+        self.fc_size = 32
+        self.num_layers = 1
         self.learning_rate = 0.001
         self.num_epochs = 100
-        self.batch_size = 256
+        self.batch_size = 32
         self.window_size = 100
         self.model_path = 'checkpoints/best_model.pth'
         
@@ -22,9 +22,6 @@ class TrainingConfig:
         # Checkpoint parameters
         self.checkpoint_dir = "checkpoints"
         self.save_best_model_only = True
-        
-        # Validation split
-        self.val_split = 0.15  # 15% of training data for validation
         
         self.random_seed = 42
         
