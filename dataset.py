@@ -63,21 +63,24 @@ def make_dataloaders(data: DataFrame, window_size, batch_size):
         train_dataset, 
         batch_size=batch_size, 
         shuffle=True,
-        num_workers=0,
+        num_workers=4,
+        persistent_workers=True,
         pin_memory=True if torch.cuda.is_available() else False
     )
     val_loader = DataLoader(
         val_dataset, 
         batch_size=batch_size, 
         shuffle=False,
-        num_workers=0,
+        num_workers=4,
+        persistent_workers=True,
         pin_memory=True if torch.cuda.is_available() else False
     )
     test_loader = DataLoader(
         test_dataset, 
         batch_size=batch_size, 
         shuffle=False,
-        num_workers=0,
+        num_workers=4,
+        persistent_workers=True,
         pin_memory=True if torch.cuda.is_available() else False
     )
     

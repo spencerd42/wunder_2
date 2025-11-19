@@ -5,7 +5,7 @@ import numpy as np
 from sklearn.metrics import r2_score, mean_squared_error
 
 from dataset import make_dataloaders
-from architecture import TimeSeriesLSTM
+from architecture import TimeSeriesLSTM, AttentionLSTM
 from config import TrainingConfig
 
 def calculate_metrics(predictions: np.ndarray, actuals: np.ndarray) -> dict:
@@ -57,8 +57,16 @@ if __name__ == "__main__":
         hidden_size=config.hidden_size,
         fc_size=config.fc_size,
         num_layers=config.num_layers,
-        output_size=input_size)
-    model.load_state_dict(torch.load('checkpoints/best_model.pth', map_location=device))
+        output_size=input_size
+    )
+    # model = AttentionLSTM(
+    #     input_size=input_size,
+    #     hidden_size=config.hidden_size,
+    #     fc_size=config.fc_size,
+    #     num_layers=config.num_layers,
+    #     output_size=input_size
+    # )
+    model.load_state_dict(torch.load(config.model_path, map_location=device))
     model.to(device)
 
     # Run evaluation

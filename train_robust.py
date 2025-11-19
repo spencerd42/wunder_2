@@ -12,7 +12,7 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
-from architecture import TimeSeriesLSTM
+from architecture import TimeSeriesLSTM, AttentionLSTM
 from dataset import make_dataloaders
 from config import TrainingConfig
 
@@ -161,22 +161,14 @@ def validate(model: nn.Module, val_loader: DataLoader,
 # TRAINING LOOP
 # ============================================================================
 
-def train(input_size: int, train_loader: DataLoader, val_loader: DataLoader,
-          config: TrainingConfig, logger=None) -> dict:
+def train(device: torch.device, input_size: int, train_loader: DataLoader,
+          val_loader: DataLoader, config: TrainingConfig, logger=None) -> dict:
     """
     Robust training loop with early stopping and validation
     
     Returns:
         training_history: Dictionary containing loss and metrics history
     """
-    
-    # Device setup
-    if torch.cuda.is_available():
-        device = torch.device('cuda')
-    elif torch.mps.is_available():
-        device = torch.device('mps')
-    else:
-        device = torch.device('cpu')
     
     if logger:
         logger.info(f"Using device: {device}")
@@ -195,6 +187,14 @@ def train(input_size: int, train_loader: DataLoader, val_loader: DataLoader,
         num_layers=config.num_layers,
         output_size=input_size
     ).to(device)
+    
+    # model = AttentionLSTM(
+    #     input_size=input_size,
+    #     hidden_size=config.hidden_size,
+    #     fc_size=config.fc_size,
+    #     num_layers=config.num_layers,
+    #     output_size=input_size
+    # ).to(device)
     
     # Loss function and optimizer
     criterion = nn.MSELoss()
@@ -249,7 +249,16 @@ def train(input_size: int, train_loader: DataLoader, val_loader: DataLoader,
             # Forward pass
             optimizer.zero_grad()
             output = model(x)
-            loss = criterion(output, y)
+            
+            if isinstance(model, TimeSeriesLSTM):
+                loss = criterion(output, y)
+            elif isinstance(model, AttentionLSTM):
+                mse_loss = criterion(output, y)
+                attn_reg = model.get_attention_regularization(l2_weight=0.001)
+                loss = mse_loss + attn_reg
+            else:
+                print('Invalid model.')
+                return {}
             
             # Backward pass
             loss.backward()
@@ -257,7 +266,7 @@ def train(input_size: int, train_loader: DataLoader, val_loader: DataLoader,
             optimizer.step()
             
             train_loss += loss.item()
-            train_bar.set_postfix({'loss': loss.item()})
+            train_bar.set_postfix({'loss': f"{loss.item():.4f}"})
         
         avg_train_loss = train_loss / len(train_loader)
         history['train_loss'].append(avg_train_loss)
@@ -320,7 +329,7 @@ def train(input_size: int, train_loader: DataLoader, val_loader: DataLoader,
         logger.info(f"Best validation loss: {early_stopping.best_loss:.6f}")
     
     # Load best model
-    model.load_state_dict(torch.load(best_model_path))
+    # model.load_state_dict(torch.load(best_model_path))
     
     # Save training history
     # history_path = f"{config.checkpoint_dir}/training_history.json"
@@ -386,6 +395,14 @@ if __name__ == "__main__":
     config = TrainingConfig()
     logger = setup_logging(config.checkpoint_dir)
     
+    # Device setup
+    if torch.cuda.is_available():
+        device = torch.device('cuda')
+    elif torch.mps.is_available():
+        device = torch.device('mps')
+    else:
+        device = torch.device('cpu')
+    
     logger.info("="*70)
     logger.info("STARTING ROBUST TRAINING PIPELINE")
     logger.info("="*70)
@@ -405,6 +422,7 @@ if __name__ == "__main__":
     # Train model
     logger.info("Starting training...")
     model, history = train(
+        device=device,
         input_size=32,
         train_loader=train_loader,
         val_loader=val_loader,
@@ -414,8 +432,7 @@ if __name__ == "__main__":
     
     # Evaluate on test set
     logger.info("Evaluating model...")
-    predictions, actuals, metrics = evaluate(model, test_loader, 
-                                            torch.device('mps'), logger)
+    predictions, actuals, metrics = evaluate(model, test_loader, device, logger)
     
     logger.info("="*70)
     logger.info("TRAINING PIPELINE COMPLETE")

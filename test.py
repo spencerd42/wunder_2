@@ -1,7 +1,3 @@
-import pandas as pd
+import torch
 
-from dataset import split_data
-
-data = pd.read_parquet('data/train.parquet')
-
-split_data(data)
+print(type(torch.device('cpu')))
