@@ -5,8 +5,8 @@ import numpy as np
 from sklearn.metrics import r2_score, mean_squared_error
 
 from dataset import make_dataloaders
-from architecture import TimeSeriesLSTM, AttentionLSTM
-from config import TrainingConfig
+from architecture_with_tft import TimeSeriesLSTM, AttentionLSTM, TemporalFusionTransformer
+from config_with_tft import TrainingConfig
 
 def calculate_metrics(predictions: np.ndarray, actuals: np.ndarray) -> dict:
     mse = mean_squared_error(actuals, predictions)
@@ -41,7 +41,7 @@ def evaluate(model, test_loader, device):
     return predictions, actuals, metrics
 
 if __name__ == "__main__":
-    config = TrainingConfig()
+    config = TrainingConfig('tft')
 
     device = torch.device('cpu')
 
@@ -52,13 +52,13 @@ if __name__ == "__main__":
 
     # Initialize model architecture (match training params)
     input_size = config.input_size
-    model = TimeSeriesLSTM(
-        input_size=input_size,
-        hidden_size=config.hidden_size,
-        fc_size=config.fc_size,
-        num_layers=config.num_layers,
-        output_size=input_size
-    )
+    # model = TimeSeriesLSTM(
+    #     input_size=input_size,
+    #     hidden_size=config.hidden_size,
+    #     fc_size=config.fc_size,
+    #     num_layers=config.num_layers,
+    #     output_size=input_size
+    # )
     # model = AttentionLSTM(
     #     input_size=input_size,
     #     hidden_size=config.hidden_size,
@@ -66,6 +66,14 @@ if __name__ == "__main__":
     #     num_layers=config.num_layers,
     #     output_size=input_size
     # )
+    model = TemporalFusionTransformer(
+        input_size=config.input_size,
+        hidden_size=config.hidden_size,
+        num_heads=config.num_heads,
+        num_lstm_layers=config.num_lstm_layers,
+        dropout=config.dropout,
+        output_size=config.input_size
+    )
     model.load_state_dict(torch.load(config.model_path, map_location=device))
     model.to(device)
 

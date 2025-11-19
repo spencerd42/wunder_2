@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
+from torch import autocast, GradScaler
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
@@ -207,7 +208,7 @@ def train(device: torch.device, input_size: int, train_loader: DataLoader,
         
     else:
         raise ValueError(f"Unknown model type: {config.model_type}")
-    
+        
     # Log model architecture
     if logger:
         logger.info(f"Model architecture:\n{model}")
@@ -235,6 +236,11 @@ def train(device: torch.device, input_size: int, train_loader: DataLoader,
         model_save_path=f'{config.checkpoint_dir}/model_{config.model_type}_{TIMESTAMP}.pth',
         verbose=True
     )
+
+    # Mixed precision scaler
+    scaler = GradScaler() if device.type == 'cuda' else None
+    if scaler and logger:
+        logger.info("Mixed precision training enabled")
     
     # Training history
     history = {
@@ -260,6 +266,34 @@ def train(device: torch.device, input_size: int, train_loader: DataLoader,
         
         train_bar = tqdm(enumerate(train_loader), total=len(train_loader),
                         desc=f"Epoch {epoch+1}/{config.num_epochs} [Train]")
+
+        # In training loop, replace the forward/backward pass:
+        # for batch_idx, (x, y) in train_bar:
+        #     x = x.to(device)
+        #     y = y.to(device)
+            
+        #     optimizer.zero_grad()
+            
+        #     # Use autocast for mixed precision
+        #     if scaler is not None:
+        #         with autocast(device_type='cuda'):
+        #             output = model(x)
+        #             loss = criterion(output, y)
+                
+        #         scaler.scale(loss).backward()
+        #         scaler.unscale_(optimizer)
+        #         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+        #         scaler.step(optimizer)
+        #         scaler.update()
+        #     else:
+        #         output = model(x)
+        #         loss = criterion(output, y)
+        #         loss.backward()
+        #         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+        #         optimizer.step()
+
+        #     train_loss += loss.item()
+        #     train_bar.set_postfix({'loss': f"{loss.item():.4f}"})
         
         for batch_idx, (x, y) in train_bar:
             x = x.to(device)
