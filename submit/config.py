@@ -9,7 +9,7 @@ class TrainingConfig:
         self.num_epochs = 100
         self.batch_size = 64
         self.window_size = 100
-        self.model_path = 'checkpoints/model_20251119_180809.pth'
+        self.model_path = 'checkpoints/model_20251119_180809_2.pth'
         
         # Early stopping parameters
         self.early_stopping_patience = 8

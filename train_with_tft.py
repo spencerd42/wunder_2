@@ -12,9 +12,10 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
-from architecture import TimeSeriesLSTM, AttentionLSTM
+# Import models - UPDATE THIS LINE to use your new architecture file
+from architecture_with_tft import TimeSeriesLSTM, AttentionLSTM, TemporalFusionTransformer
 from dataset import make_dataloaders
-from config import TrainingConfig
+from config_with_tft import TrainingConfig
 
 TIMESTAMP = 'no_time'
 
@@ -26,7 +27,6 @@ def setup_logging(checkpoint_dir: str) -> logging.Logger:
     """Setup logging to file and console"""
     global TIMESTAMP
     TIMESTAMP = datetime.now().strftime('%Y%m%d_%H%M%S')
-    
     Path(checkpoint_dir).mkdir(parents=True, exist_ok=True)
     
     logger = logging.getLogger('train')
@@ -44,14 +44,13 @@ def setup_logging(checkpoint_dir: str) -> logging.Logger:
     formatter = logging.Formatter(
         '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
+    
     fh.setFormatter(formatter)
     ch.setFormatter(formatter)
-    
     logger.addHandler(fh)
     logger.addHandler(ch)
     
     return logger
-
 
 # ============================================================================
 # EARLY STOPPING CLASS
@@ -76,7 +75,7 @@ class EarlyStopping:
         self.best_loss = None
         self.early_stop = False
         self.best_epoch = 0
-        
+    
     def __call__(self, val_loss: float, model: nn.Module, epoch: int):
         """Check if early stopping condition is met"""
         if self.best_loss is None:
@@ -101,13 +100,6 @@ class EarlyStopping:
                 if self.verbose:
                     print(f"Early stopping triggered after {self.counter} epochs without improvement")
 
-
-# ============================================================================
-# DATA LOADING
-# ============================================================================
-
-# now in dataset.py
-
 # ============================================================================
 # METRICS CALCULATION
 # ============================================================================
@@ -126,8 +118,7 @@ def calculate_metrics(predictions: np.ndarray, actuals: np.ndarray) -> dict:
         'r2': r2
     }
 
-
-def validate(model: nn.Module, val_loader: DataLoader, 
+def validate(model: nn.Module, val_loader: DataLoader,
              criterion: nn.Module, device: torch.device) -> tuple:
     """
     Validate the model on validation set
@@ -152,13 +143,11 @@ def validate(model: nn.Module, val_loader: DataLoader,
     
     avg_val_loss = val_loss / len(val_loader)
     
-    metrics = {}
     predictions = np.array(predictions)
     actuals = np.array(actuals)
     metrics = calculate_metrics(predictions, actuals)
     
     return avg_val_loss, metrics
-
 
 # ============================================================================
 # TRAINING LOOP
@@ -172,34 +161,60 @@ def train(device: torch.device, input_size: int, train_loader: DataLoader,
     Returns:
         training_history: Dictionary containing loss and metrics history
     """
-    
     global TIMESTAMP
     
     if logger:
         logger.info(f"Using device: {device}")
+        logger.info(f"Model type: {config.model_type}")
     else:
         print(f"Using device: {device}")
+        print(f"Model type: {config.model_type}")
     
     # Create checkpoint directory
     Path(config.checkpoint_dir).mkdir(parents=True, exist_ok=True)
-    best_model_path = f"{config.checkpoint_dir}/best_model.pth"
     
-    # Initialize model
-    model = TimeSeriesLSTM(
-        input_size=input_size,
-        hidden_size=config.hidden_size,
-        fc_size=config.fc_size,
-        num_layers=config.num_layers,
-        output_size=input_size
-    ).to(device)
+    # Initialize model based on config
+    if config.model_type == 'lstm':
+        model = TimeSeriesLSTM(
+            input_size=input_size,
+            hidden_size=config.hidden_size,
+            fc_size=config.fc_size,
+            num_layers=config.num_layers,
+            output_size=input_size
+        ).to(device)
+        
+    elif config.model_type == 'attention':
+        model = AttentionLSTM(
+            input_size=input_size,
+            hidden_size=config.hidden_size,
+            fc_size=config.fc_size,
+            num_layers=config.num_layers,
+            output_size=input_size,
+            lstm_dropout=config.lstm_dropout,
+            attention_dropout=config.attention_dropout,
+            fc_dropout=config.fc_dropout
+        ).to(device)
+        
+    elif config.model_type == 'tft':
+        model = TemporalFusionTransformer(
+            input_size=input_size,
+            hidden_size=config.hidden_size,
+            num_heads=config.num_heads,
+            num_lstm_layers=config.num_lstm_layers,
+            dropout=config.dropout,
+            output_size=input_size
+        ).to(device)
+        
+    else:
+        raise ValueError(f"Unknown model type: {config.model_type}")
     
-    # model = AttentionLSTM(
-    #     input_size=input_size,
-    #     hidden_size=config.hidden_size,
-    #     fc_size=config.fc_size,
-    #     num_layers=config.num_layers,
-    #     output_size=input_size
-    # ).to(device)
+    # Log model architecture
+    if logger:
+        logger.info(f"Model architecture:\n{model}")
+        total_params = sum(p.numel() for p in model.parameters())
+        trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        logger.info(f"Total parameters: {total_params:,}")
+        logger.info(f"Trainable parameters: {trainable_params:,}")
     
     # Loss function and optimizer
     criterion = nn.MSELoss()
@@ -207,9 +222,9 @@ def train(device: torch.device, input_size: int, train_loader: DataLoader,
     
     # Learning rate scheduler
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, 
-        mode='min', 
-        factor=config.lr_scheduler_factor, 
+        optimizer,
+        mode='min',
+        factor=config.lr_scheduler_factor,
         patience=config.lr_scheduler_patience
     )
     
@@ -217,7 +232,7 @@ def train(device: torch.device, input_size: int, train_loader: DataLoader,
     early_stopping = EarlyStopping(
         patience=config.early_stopping_patience,
         min_delta=config.early_stopping_min_delta,
-        model_save_path=f'{config.checkpoint_dir}/model_{TIMESTAMP}.pth',
+        model_save_path=f'{config.checkpoint_dir}/model_{config.model_type}_{TIMESTAMP}.pth',
         verbose=True
     )
     
@@ -239,7 +254,6 @@ def train(device: torch.device, input_size: int, train_loader: DataLoader,
     
     # Training loop
     for epoch in range(config.num_epochs):
-        
         # Training phase
         model.train()
         train_loss = 0.0
@@ -255,15 +269,15 @@ def train(device: torch.device, input_size: int, train_loader: DataLoader,
             optimizer.zero_grad()
             output = model(x)
             
-            if isinstance(model, TimeSeriesLSTM):
-                loss = criterion(output, y)
-            elif isinstance(model, AttentionLSTM):
+            # Compute loss (with regularization for attention model)
+            if config.model_type == 'attention':
                 mse_loss = criterion(output, y)
-                attn_reg = model.get_attention_regularization(l2_weight=0.001)
+                attn_reg = model.get_attention_regularization(
+                    l2_weight=config.attention_l2_weight
+                )
                 loss = mse_loss + attn_reg
             else:
-                print('Invalid model.')
-                return {}
+                loss = criterion(output, y)
             
             # Backward pass
             loss.backward()
@@ -280,11 +294,10 @@ def train(device: torch.device, input_size: int, train_loader: DataLoader,
         avg_val_loss, metrics = validate(model, val_loader, criterion, device)
         history['val_loss'].append(avg_val_loss)
         
-        # Store metrics if calculated
-        if metrics:
-            history['val_rmse'].append(metrics['rmse'])
-            history['val_mae'].append(metrics['mae'])
-            history['val_r2'].append(metrics['r2'])
+        # Store metrics
+        history['val_rmse'].append(metrics['rmse'])
+        history['val_mae'].append(metrics['mae'])
+        history['val_r2'].append(metrics['r2'])
         
         # Get current learning rate
         current_lr = optimizer.param_groups[0]['lr']
@@ -292,10 +305,7 @@ def train(device: torch.device, input_size: int, train_loader: DataLoader,
         history['epoch'].append(epoch + 1)
         
         # Print progress
-        metrics_str = ""
-        if metrics:
-            metrics_str = f" | Val R²: {metrics['r2']:.4f} | Val RMSE: {metrics['rmse']:.6f}"
-        
+        metrics_str = f" | Val R²: {metrics['r2']:.4f} | Val RMSE: {metrics['rmse']:.6f}"
         print(f"Epoch {epoch+1}/{config.num_epochs} | "
               f"Train Loss: {avg_train_loss:.6f} | "
               f"Val Loss: {avg_val_loss:.6f}{metrics_str}")
@@ -318,6 +328,7 @@ def train(device: torch.device, input_size: int, train_loader: DataLoader,
     print("\n" + "="*70)
     print("TRAINING COMPLETE")
     print("="*70)
+    print(f"Model type: {config.model_type.upper()}")
     print(f"Total epochs trained: {len(history['train_loss'])}")
     print(f"Best epoch: {early_stopping.best_epoch + 1}")
     print(f"Best validation loss: {early_stopping.best_loss:.6f}")
@@ -333,23 +344,13 @@ def train(device: torch.device, input_size: int, train_loader: DataLoader,
         logger.info(f"Best epoch: {early_stopping.best_epoch + 1}")
         logger.info(f"Best validation loss: {early_stopping.best_loss:.6f}")
     
-    # Load best model
-    # model.load_state_dict(torch.load(best_model_path))
-    
-    # Save training history
-    # history_path = f"{config.checkpoint_dir}/training_history.json"
-    # with open(history_path, 'w') as f:
-    #     json.dump(history, f, indent=2)
-    # print(f"\nTraining history saved to {history_path}")
-    
     return model, history
-
 
 # ============================================================================
 # EVALUATION
 # ============================================================================
 
-def evaluate(model: nn.Module, test_loader: DataLoader, 
+def evaluate(model: nn.Module, test_loader: DataLoader,
              device: torch.device, logger=None) -> dict:
     """Generate predictions and evaluate on test set"""
     model.eval()
@@ -375,10 +376,10 @@ def evaluate(model: nn.Module, test_loader: DataLoader,
     print("\n" + "="*70)
     print("TEST SET EVALUATION")
     print("="*70)
-    print(f"MSE:  {metrics['mse']:.6f}")
+    print(f"MSE: {metrics['mse']:.6f}")
     print(f"RMSE: {metrics['rmse']:.6f}")
-    print(f"MAE:  {metrics['mae']:.6f}")
-    print(f"R²:   {metrics['r2']:.6f}")
+    print(f"MAE: {metrics['mae']:.6f}")
+    print(f"R²: {metrics['r2']:.6f}")
     
     if logger:
         logger.info("TEST SET EVALUATION")
@@ -389,15 +390,18 @@ def evaluate(model: nn.Module, test_loader: DataLoader,
     
     return predictions, actuals, metrics
 
-
 # ============================================================================
 # MAIN
 # ============================================================================
 
-if __name__ == "__main__":
-    # Setup
+def main():
+    # Setup - CHANGE model_type HERE: 'lstm', 'attention', or 'tft'
     CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-    config = TrainingConfig()
+    
+    # SELECT YOUR MODEL TYPE
+    MODEL_TYPE = 'tft'  # Change to 'lstm', 'attention', or 'tft'
+    
+    config = TrainingConfig(model_type=MODEL_TYPE)
     logger = setup_logging(config.checkpoint_dir)
     
     # Device setup
@@ -409,7 +413,7 @@ if __name__ == "__main__":
         device = torch.device('cpu')
     
     logger.info("="*70)
-    logger.info("STARTING ROBUST TRAINING PIPELINE")
+    logger.info(f"STARTING TRAINING PIPELINE - {MODEL_TYPE.upper()} MODEL")
     logger.info("="*70)
     
     # Load data
@@ -418,8 +422,9 @@ if __name__ == "__main__":
     
     # Create dataloaders
     logger.info("Creating dataloaders...")
-    train_loader, val_loader, test_loader = make_dataloaders(data, config.window_size, config.batch_size)
-    
+    train_loader, val_loader, test_loader = make_dataloaders(
+        data, config.window_size, config.batch_size
+    )
     logger.info(f"Train batches: {len(train_loader)}")
     logger.info(f"Val batches: {len(val_loader)}")
     logger.info(f"Test batches: {len(test_loader)}")
@@ -442,3 +447,6 @@ if __name__ == "__main__":
     logger.info("="*70)
     logger.info("TRAINING PIPELINE COMPLETE")
     logger.info("="*70)
+
+if __name__ == "__main__":
+    main()

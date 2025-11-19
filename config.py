@@ -4,12 +4,12 @@ class TrainingConfig:
         self.input_size = 32
         self.hidden_size = 64
         self.fc_size = 64
-        self.num_layers = 3
+        self.num_layers = 1
         self.learning_rate = 0.001
         self.num_epochs = 100
         self.batch_size = 64
         self.window_size = 100
-        self.model_path = 'checkpoints/model_20251119_180809.pth'
+        self.model_path = 'checkpoints/model_20251119_180809_2.pth'
         
         # Early stopping parameters
         self.early_stopping_patience = 8
