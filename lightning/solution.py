@@ -2,7 +2,7 @@ import os
 import sys
 import numpy as np
 import torch
-from tft_lightning_model import TemporalFusionTransformerLightning
+from tft_lightning_model_vsn import TemporalFusionTransformerLightning
 from config_lightning import LightningTrainingConfig
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -37,7 +37,7 @@ class PredictionModel:
         # Load model
         self.device = torch.device('cpu')
 
-        self.model_path = 'checkpoints_lightning/tft-epoch=16-val_loss=0.603450.ckpt'
+        self.model_path = 'checkpoints_lightning/tft-epoch=28-val_loss=0.602509.ckpt'
         
         # Load checkpoint
         if os.path.exists(self.model_path):

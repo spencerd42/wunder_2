@@ -2,7 +2,7 @@ import os
 import sys
 import numpy as np
 import torch
-from tft_lightning_model import TemporalFusionTransformerLightning
+from tft_lightning_model_vsn import TemporalFusionTransformerLightning
 from config_lightning import LightningTrainingConfig
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -15,13 +15,6 @@ from utils import DataPoint, ScorerStepByStep
 torch.set_flush_denormal(True) 
 
 class PredictionModel:
-    """
-    OPTIMIZED LSTM-based model for time series prediction.
-    - Uses a pre-allocated NumPy array as a ring buffer for high-speed windowing.
-    - Uses torch.from_numpy for zero-copy tensor creation.
-    - Assumes data is already scaled (or doesn't need scaling).
-    """
-
     def __init__(self):
         config = LightningTrainingConfig()
         
@@ -37,7 +30,7 @@ class PredictionModel:
         # Load model
         self.device = torch.device('cpu')
 
-        self.model_path = 'tft-epoch=16-val_loss=0.603450.ckpt'
+        self.model_path = 'tft-epoch=28-val_loss=0.602509.ckpt'
         
         # Load checkpoint
         if os.path.exists(self.model_path):

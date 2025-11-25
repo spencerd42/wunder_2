@@ -8,7 +8,8 @@ from pathlib import Path
 import json
 
 # Import the Lightning model and dataset
-from tft_lightning_model import TemporalFusionTransformerLightning, MetricsCallback
+# from tft_lightning_model import TemporalFusionTransformerLightning, MetricsCallback
+from tft_lightning_model_vsn import TemporalFusionTransformerLightning, MetricsCallback
 from dataset import make_dataloaders
 from config_lightning import LightningTrainingConfig
 

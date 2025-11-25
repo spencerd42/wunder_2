@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import pytorch_lightning as pl
-from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from sklearn.metrics import r2_score, mean_squared_error
 import numpy as np
 
@@ -184,6 +184,13 @@ class TemporalFusionTransformerLightning(pl.LightningModule):
             dropout=dropout
         )
         
+        self.enrichment_grn = GatedResidualNetwork(
+            input_size=hidden_size * 2,
+            hidden_size=hidden_size * 2,
+            output_size=hidden_size * 2,
+            dropout=dropout
+        )
+        
         self.output_grn = GatedResidualNetwork(
             input_size=hidden_size * 2,
             hidden_size=hidden_size * 2,
@@ -218,8 +225,10 @@ class TemporalFusionTransformerLightning(pl.LightningModule):
         # Use last timestep
         last_output = lstm_out[:, -1, :]
         
+        enriched = self.enrichment_grn(last_output)
+        
         # Final output processing
-        final_output = self.output_grn(last_output)
+        final_output = self.output_grn(enriched)
         predictions = self.output_layer(final_output)
         
         return predictions
@@ -295,18 +304,12 @@ class TemporalFusionTransformerLightning(pl.LightningModule):
             weight_decay=1e-4  # regularization
         )
         
-        scheduler = ReduceLROnPlateau(
-            optimizer,
-            mode='min',
-            factor=self.lr_scheduler_factor,
-            patience=self.lr_scheduler_patience
-        )
-        
+        scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2)
         return {
-            'optimizer': optimizer, 
+            'optimizer': optimizer,
             'lr_scheduler': {
-                'scheduler': scheduler, 
-                'monitor': 'val_loss'
+                'scheduler': scheduler,
+                'interval': 'epoch'
             }
         }
 
