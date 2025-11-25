@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from torch import autocast, GradScaler
+from torch import GradScaler
 import pandas as pd
 import numpy as np
 from tqdm import tqdm

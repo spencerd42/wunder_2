@@ -1,0 +1,18 @@
+{
+  "input_size": 32,
+  "window_size": 100,
+  "batch_size": 256,
+  "data_path": "/Users/spencerdwyer/Code/wunder_2/lightning/data/train.parquet",
+  "hidden_size": 32,
+  "num_heads": 4,
+  "num_lstm_layers": 1,
+  "dropout": 0.1,
+  "num_epochs": 100,
+  "learning_rate": 0.0005,
+  "lr_scheduler_factor": 0.5,
+  "lr_scheduler_patience": 8,
+  "early_stopping_patience": 20,
+  "early_stopping_min_delta": 1e-05,
+  "checkpoint_dir": "checkpoints_lightning",
+  "random_seed": 42
+}

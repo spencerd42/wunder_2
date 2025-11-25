@@ -50,7 +50,7 @@ class TrainingConfig:
         elif model_type == 'tft':
             # TFT-specific parameters
             self.hidden_size = 32
-            self.num_heads = 2
+            self.num_heads = 4
             self.num_lstm_layers = 1
             self.dropout = 0.1
             self.learning_rate = 0.0005  # Lower learning rate for TFT
