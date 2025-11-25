@@ -37,7 +37,7 @@ class PredictionModel:
         # Load model
         self.device = torch.device('cpu')
 
-        self.model_path = 'tft-epoch=53-val_loss=0.607870.ckpt'
+        self.model_path = 'tft-epoch=16-val_loss=0.603450.ckpt'
         
         # Load checkpoint
         if os.path.exists(self.model_path):

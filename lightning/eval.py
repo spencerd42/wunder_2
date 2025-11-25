@@ -65,7 +65,7 @@ if __name__ == "__main__":
     _, _, test_loader = make_dataloaders(data, window_size=100, batch_size=256)
 
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    checkpoint_path = os.path.join(current_dir, '../checkpoints_lightning/tft-epoch=53-val_loss=0.607870.ckpt')
+    checkpoint_path = os.path.join(current_dir, '../checkpoints_lightning/tft-epoch=16-val_loss=0.603450.ckpt')
     print(checkpoint_path)
 
     # Device selection

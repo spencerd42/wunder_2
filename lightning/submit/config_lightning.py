@@ -15,9 +15,9 @@ class LightningTrainingConfig:
         self.data_path = os.path.join(current_dir, 'data/train.parquet')
         
         # Model parameters (TFT-specific)
-        self.hidden_size = 32
+        self.hidden_size = 64
         self.num_heads = 4
-        self.num_lstm_layers = 1
+        self.num_lstm_layers = 2
         self.dropout = 0.1
         
         # Training parameters
@@ -29,7 +29,7 @@ class LightningTrainingConfig:
         self.lr_scheduler_patience = 8
         
         # Early stopping parameters
-        self.early_stopping_patience = 20
+        self.early_stopping_patience = 10
         self.early_stopping_min_delta = 1e-5
         
         # Checkpoint parameters

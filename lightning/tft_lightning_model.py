@@ -174,31 +174,30 @@ class TemporalFusionTransformerLightning(pl.LightningModule):
             hidden_size=hidden_size,
             num_layers=num_lstm_layers,
             batch_first=True,
-            dropout=dropout if num_lstm_layers > 1 else 0
+            dropout=dropout if num_lstm_layers > 1 else 0,
+            bidirectional=True
         )
         
-        # Self-attention
         self.self_attention = MultiHeadAttention(
-            d_model=hidden_size,
+            d_model=hidden_size * 2,
             num_heads=num_heads,
             dropout=dropout
         )
         
-        # Single GRN instead of multiple
         self.output_grn = GatedResidualNetwork(
-            input_size=hidden_size,
-            hidden_size=hidden_size,
-            output_size=hidden_size,
+            input_size=hidden_size * 2,
+            hidden_size=hidden_size * 2,
+            output_size=hidden_size * 2,
             dropout=dropout
         )
         
         # Output layer
-        self.output_layer = nn.Linear(hidden_size, self.output_size)
-        
-        # Minimal layer norm
-        self.layer_norm = nn.LayerNorm(hidden_size)
+        self.output_layer = nn.Linear(hidden_size * 2, self.output_size)
+
+        # Minimal layer norm and dropout adapted for bidirectional output size
+        self.layer_norm = nn.LayerNorm(hidden_size * 2)
         self.dropout = nn.Dropout(dropout)
-        
+
         # Loss function
         self.criterion = nn.MSELoss()
     
@@ -234,21 +233,46 @@ class TemporalFusionTransformerLightning(pl.LightningModule):
         self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
         
         return loss
-    
+        
     def validation_step(self, batch, batch_idx):
         x, y = batch
         y_hat = self(x)
         loss = self.criterion(y_hat, y)
-        
-        # Log metrics
+
+        # detach and move to cpu for sklearn
+        y_np = y.detach().cpu().numpy()
+        y_hat_np = y_hat.detach().cpu().numpy()
+
+        # store for epoch-end metrics
+        if not hasattr(self, "val_targets"):
+            self.val_targets = []
+            self.val_preds = []
+        self.val_targets.append(y_np)
+        self.val_preds.append(y_hat_np)
+
         self.log('val_loss', loss, on_step=False, on_epoch=True, prog_bar=True)
+        return {'val_loss': loss}
         
-        return {'val_loss': loss, 'predictions': y_hat, 'targets': y}
-    
     def on_validation_epoch_end(self):
-        # Aggregate validation predictions for metrics calculation
-        # Lightning automatically handles this through validation_step_outputs
-        pass
+        # concatenate all batches
+        if hasattr(self, "val_targets") and len(self.val_targets) > 0:
+            y_true = np.concatenate(self.val_targets, axis=0)
+            y_pred = np.concatenate(self.val_preds, axis=0)
+
+            # flatten if necessary (for single-output regression)
+            y_true_flat = y_true.reshape(-1)
+            y_pred_flat = y_pred.reshape(-1)
+
+            r2 = r2_score(y_true_flat, y_pred_flat)
+
+            # log and print R2
+            self.log('val_r2', r2, prog_bar=True)
+            print(f"\nEpoch {self.current_epoch} - Val R^2: {r2:.4f}")
+
+            # clear for next epoch
+            self.val_targets = []
+            self.val_preds = []
+
     
     def test_step(self, batch, batch_idx):
         x, y = batch
@@ -265,7 +289,11 @@ class TemporalFusionTransformerLightning(pl.LightningModule):
         return self(x)
     
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
+        optimizer = torch.optim.AdamW(
+            self.parameters(), 
+            lr=self.learning_rate,
+            weight_decay=1e-4  # regularization
+        )
         
         scheduler = ReduceLROnPlateau(
             optimizer,
@@ -286,18 +314,19 @@ class TemporalFusionTransformerLightning(pl.LightningModule):
 # ============================================================================
 # METRICS CALLBACK
 # ============================================================================
-
+    
 class MetricsCallback(pl.Callback):
     """Custom callback to compute additional metrics during validation"""
-    
     def on_validation_epoch_end(self, trainer, pl_module):
-        # Get validation outputs
         outputs = trainer.callback_metrics
-        
-        if 'val_loss' in outputs:
-            val_loss = outputs['val_loss'].item()
-            
-            # Log additional info
-            current_lr = trainer.optimizers[0].param_groups[0]['lr']
-            
-            print(f"\nValidation Loss: {val_loss:.6f} | LR: {current_lr:.6f}")
+        val_loss = outputs.get('val_loss', None)
+        val_r2 = outputs.get('val_r2', None)
+        current_lr = trainer.optimizers[0].param_groups[0]['lr']
+
+        msg = "\n"
+        if val_loss is not None:
+            msg += f"Validation Loss: {val_loss.item():.6f} | "
+        if val_r2 is not None:
+            msg += f"Val R^2: {val_r2.item():.4f} | "
+        msg += f"LR: {current_lr:.6f}"
+        print(msg)
