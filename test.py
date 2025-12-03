@@ -1,3 +1,5 @@
-import torch
+import pandas as pd
 
-print(type(torch.device('cpu')))
+data = pd.read_parquet('lightning_tft/train.parquet')
+
+print(data)
