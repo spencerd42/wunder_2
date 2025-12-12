@@ -1,9 +1,0 @@
-dropout: 0.1
-hidden_size: 48
-input_size: 32
-learning_rate: 0.0005
-lr_scheduler_factor: 0.5
-lr_scheduler_patience: 8
-num_heads: 4
-num_lstm_layers: 2
-output_size: 32
