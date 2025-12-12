@@ -208,3 +208,8 @@ __marimo__/
 
 *.parquet
 .DS_Store
+
+checkpoints/
+checkpoints_lightning/
+lightning_logs/
+data/
